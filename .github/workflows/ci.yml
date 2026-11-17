@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read # gitleaks lists the PR's commits to scan them
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -20,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # gitleaks scans the whole history of the PR
+          fetch-depth: 0 # gitleaks needs the PR's commits
           persist-credentials: false
 
       - uses: actions/setup-java@v4
@@ -32,7 +31,25 @@ jobs:
       - name: Build and test (no Ollama in CI; Dev Services starts Postgres in Docker)
         run: ./mvnw -B verify
 
+      # gitleaks-action needs a paid license on organization repos, so run the
+      # free gitleaks CLI directly. It scans only the commits this run adds.
       - name: Secret scan
-        uses: gitleaks/gitleaks-action@v2
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_VERSION: "8.28.0"
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          tarball="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfLO "$base/$tarball"
+          curl -sSfL "$base/gitleaks_${GITLEAKS_VERSION}_checksums.txt" | grep " $tarball\$" | sha256sum -c -
+          tar -xzf "$tarball" gitleaks
+          cd "$GITHUB_WORKSPACE"
+          if [ -z "$BASE_SHA" ] || [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ]; then
+            range="$HEAD_SHA"
+          else
+            range="$BASE_SHA..$HEAD_SHA"
+          fi
+          "$RUNNER_TEMP/gitleaks" git --redact --verbose --log-opts="$range" .
