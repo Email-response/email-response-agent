@@ -180,3 +180,7 @@ Packages are layered from top to bottom: a package may depend on those listed be
 `MAILBOX` is a build-time choice: build with `MAILBOX=gmail` for a Gmail deployment.
 
 The `agents/` folder is read at run time, not packaged: copy it next to the application, or point `AGENTS_DIR` at it.
+
+## Authors
+
+Marouane Benabdelkader · Kacem Abdelbaki · Daniel Abou Orm · Mohamed Dhia Ben Salah
